@@ -1,8 +1,7 @@
+import os
 from trainer import Trainer, TrainerArgs
 from TTS.tts.configs.vits_config import VitsConfig
-from TTS.tts.datasets import load_tts_samples
 from TTS.tts.configs.shared_configs import BaseDatasetConfig
-import os
 
 if __name__ == "__main__":
     # Путь к директории с проектом
