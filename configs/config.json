@@ -1,0 +1,63 @@
+{
+    "output_path": "./output",
+    "restore_best": true,
+    "use_cuda": true,
+  
+    "audio": {
+      "sample_rate": 22050,
+      "num_mels": 80,
+      "n_fft": 1024,
+      "win_length": 1024,
+      "hop_length": 256,
+      "mel_fmin": 0,
+      "mel_fmax": 8000
+    },
+  
+    "model": {
+      "type": "VITS",
+      "vits": {
+        "block_max_steps": 10000,
+        "text_cleaner": "russian_cleaners", 
+        "use_phonemes": false,
+        "hidden_size": 192,
+        "num_speakers": 1,
+        "padding_idx": 0,
+        "mel_chan": 80,
+        "kernel_size": 3,
+        "p_dropout": 0.0,
+        "text_embed_type": "characters"
+      },
+      "speakers": 1,
+      "speaker_embedding_size": 0,
+      "vocoder": {
+        "type": "HIFIGAN",
+        "hifi": {
+          "resblock": "1", 
+          "upsample_rates": [8, 8, 2, 2],
+          "upsample_kernel_sizes": [16, 16, 4, 4],
+          "num_harm": 3
+        }
+      }
+    },
+  
+    "datasets": [
+      {
+        "name": "MyDataset",
+        "path": "./data",
+        "formatter": "ljspeech",
+        "meta_file_train": "metadata.csv"
+      }
+    ],
+  
+    "training": {
+      "learning_rate": 0.0002,
+      "batch_size": 16,
+      "num_loader_workers": 4,
+      "num_eval_loader_workers": 2,
+      "print_step": 50,
+      "eval_split_ratio": 0.1,
+      "test_delay_epochs": 10,
+      "epochs": 1000
+    }
+  }
+  
