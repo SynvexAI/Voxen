@@ -1,22 +1,24 @@
 import random
 import wave
 import os
-# Убедитесь, что piper установлен: pip install piper-tts
-# Если piper не импортируется, значит, он не установлен в вашем окружении Python.
-try:
-    from piper import PiperVoice
-except ImportError:
-    print("Библиотека piper не найдена. Пожалуйста, установите ее: pip install piper-tts")
-    PiperVoice = None # Для предотвращения ошибок ниже, если piper не установлен
+import sys # Для более информативного вывода
 
 # --- Конфигурация ---
-# Путь к скачанным файлам голосовой модели Piper
-MODEL_DIR = './model/' # Создайте эту папку и поместите туда файлы модели
-# Замените на имя вашего файла модели, если оно другое
-VOICE_MODEL_FILENAME_STEM = 'ru_RU-irina-medium'
+# Путь к папке со скачанными файлами голосовой модели Piper
+MODEL_DIR = './model/' 
+# Имя вашей модели (без расширения). Должно совпадать с именами скачанных файлов.
+VOICE_MODEL_FILENAME_STEM = 'ru_RU-irina-medium' 
 VOICE_ONNX = os.path.join(MODEL_DIR, f'{VOICE_MODEL_FILENAME_STEM}.onnx')
 VOICE_JSON = os.path.join(MODEL_DIR, f'{VOICE_MODEL_FILENAME_STEM}.onnx.json')
 OUTPUT_WAV_PATH = 'output_hesitated.wav'
+
+# Попытка импорта piper-tts
+try:
+    from piper import PiperVoice
+    PIPER_INSTALLED = True
+except ImportError:
+    PIPER_INSTALLED = False
+    PiperVoice = None # Определяем для предотвращения ошибок ниже, если piper не установлен
 
 # --- Функция для добавления запинок ---
 def add_hesitations(text, probability=0.15):
@@ -25,22 +27,31 @@ def add_hesitations(text, probability=0.15):
     probability: вероятность добавления запинки после слова (от 0 до 1).
     """
     words = text.split(' ')
-    # Вы можете расширить этот список
+    # Вы можете расширить этот список или изменить существующие запинки
     hesitations = ["эм...", "э-э...", "ну...", "типа...", "как бы...", "ы-ы...", "значит..."]
     new_sentence_parts = []
     
     for word in words:
         new_sentence_parts.append(word)
         # Добавляем запинку, если выпал шанс и слово не заканчивается знаком пунктуации
-        if random.random() < probability and not any(punc in word for punc in ['.', ',', '!', '?']):
+        # и если это не само слово-паразит (чтобы не было "эм... эм...")
+        if random.random() < probability and \
+           not any(punc in word for punc in ['.', ',', '!', '?']) and \
+           word.lower() not in hesitations:
             new_sentence_parts.append(random.choice(hesitations))
             
     return ' '.join(new_sentence_parts)
 
 # --- Основная функция синтеза речи ---
 def text_to_speech_with_hesitations(text_to_speak):
-    if PiperVoice is None:
-        print("PiperVoice не инициализирован (возможно, piper-tts не установлен). Синтез невозможен.")
+    if not PIPER_INSTALLED or PiperVoice is None:
+        print("--------------------------------------------------------------------")
+        print("ОШИБКА: Библиотека piper-tts не установлена или не может быть импортирована.")
+        print("Пожалуйста, установите ее, выполнив в вашем терминале/командной строке:")
+        print("  pip3 install piper-tts  (или pip install piper-tts)")
+        print(f"Для интерпретатора Python: {sys.executable}")
+        print("Убедитесь, что вы устанавливаете ее в то же окружение Python, где запускаете этот скрипт.")
+        print("--------------------------------------------------------------------")
         return
 
     print(f"Оригинальный текст: {text_to_speak}")
@@ -49,69 +60,62 @@ def text_to_speech_with_hesitations(text_to_speak):
     text_with_hesitations = add_hesitations(text_to_speak)
     print(f"Текст с запинками: {text_with_hesitations}")
     
-    # 2. Синтезируем речь с помощью Piper
+    # 2. Проверяем наличие файлов модели
     if not (os.path.exists(VOICE_ONNX) and os.path.exists(VOICE_JSON)):
-        print(f"ОШИБКА: Файлы голосовой модели не найдены в '{MODEL_DIR}'.")
-        print(f"Пожалуйста, скачайте '{os.path.basename(VOICE_ONNX)}' и '{os.path.basename(VOICE_JSON)}'")
-        print(f"Например, отсюда: https://huggingface.co/rhasspy/piper-voices/tree/main/ru/ru_RU/irina/medium")
-        print(f"И поместите их в папку '{MODEL_DIR}' в текущей директории.")
+        print("--------------------------------------------------------------------")
+        print(f"ОШИБКА: Файлы голосовой модели не найдены.")
+        print(f"Ожидались файлы: ")
+        print(f"  1. {os.path.abspath(VOICE_ONNX)}")
+        print(f"  2. {os.path.abspath(VOICE_JSON)}")
+        print(f"Пожалуйста, скачайте модель (например, '{VOICE_MODEL_FILENAME_STEM}') с:")
+        print(f"  https://huggingface.co/rhasspy/piper-voices/tree/main/ru/ru_RU/irina/medium")
+        print(f"и поместите .onnx и .onnx.json файлы в папку '{os.path.abspath(MODEL_DIR)}'.")
+        if not os.path.exists(MODEL_DIR):
+            try:
+                os.makedirs(MODEL_DIR)
+                print(f"Папка '{os.path.abspath(MODEL_DIR)}' была только что создана. Поместите в нее файлы модели.")
+            except OSError as e:
+                print(f"Не удалось создать папку '{os.path.abspath(MODEL_DIR)}': {e}. Создайте ее вручную.")
+        print("--------------------------------------------------------------------")
         return
 
-    print("Загрузка голосовой модели...")
+    print("Загрузка голосовой модели Piper...")
     try:
-        voice = PiperVoice.load(VOICE_ONNX, VOICE_JSON)
+        voice = PiperVoice.load(model_path=VOICE_ONNX, config_path=VOICE_JSON)
     except Exception as e:
         print(f"Ошибка загрузки модели Piper: {e}")
         print("Убедитесь, что у вас правильные файлы модели и piper-tts установлен корректно.")
+        print("Также проверьте, что версия piper-tts совместима с моделью (обычно проблем нет).")
         return
 
     print(f"Синтез аудио в файл {OUTPUT_WAV_PATH}...")
     try:
-        # Piper синтезирует аудиоданные, которые нужно записать в WAV файл
-        # synthesize_stream можно использовать для потоковой записи, если нужно
-        audio_data = voice.synthesize(text_with_hesitations) # Возвращает итератор аудио чанков
+        audio_data_iterator = voice.synthesize_stream_raw(text_with_hesitations)
 
         with wave.open(OUTPUT_WAV_PATH, 'wb') as wav_file:
-            # Параметры WAV файла должны соответствовать выводу модели Piper
-            # Обычно это: 1 канал, 2 байта на сэмпл (16 бит), частота дискретизации (например, 22050 Гц для многих моделей)
-            # Эти параметры можно получить из voice.config
-            wav_file.setnchannels(voice.config.num_channels if voice.config.num_channels else 1) # type: ignore
-            wav_file.setsampwidth(voice.config.sample_width if voice.config.sample_width else 2) # type: ignore
-            wav_file.setframerate(voice.config.sample_rate if voice.config.sample_rate else 22050) # type: ignore
+            wav_file.setnchannels(voice.config.num_channels)
+            wav_file.setsampwidth(voice.config.sample_width) 
+            wav_file.setframerate(voice.config.sample_rate)
             
-            for chunk in audio_data:
-                wav_file.writeframes(chunk)
+            for audio_chunk in audio_data_iterator:
+                wav_file.writeframes(audio_chunk)
                 
-        print(f"Аудио успешно сохранено в {OUTPUT_WAV_PATH}")
+        print(f"Аудио успешно сохранено в {os.path.abspath(OUTPUT_WAV_PATH)}")
         print("Теперь вы можете воспроизвести этот файл любым аудиоплеером.")
         
-        # Опционально: попытка воспроизвести файл (требует playsound или другую библиотеку)
-        # try:
-        #     from playsound import playsound
-        #     print("Воспроизведение аудио...")
-        #     playsound(OUTPUT_WAV_PATH)
-        # except ImportError:
-        #     print("Для автоматического воспроизведения установите 'playsound': pip install playsound")
-        # except Exception as e_play:
-        #     print(f"Ошибка воспроизведения звука: {e_play}")
-
     except Exception as e:
         print(f"Ошибка во время синтеза: {e}")
 
 # --- Пример использования ---
 if __name__ == '__main__':
-    input_text = "Привет, это демонстрация работы текста с запинками и надеюсь неплохой интонацией."
+    input_text = "Привет, это демонстрация работы текста с запинками и, надеюсь, неплохой интонацией."
     
-    # Проверяем/создаем папку для модели
-    if not os.path.exists(MODEL_DIR):
-        os.makedirs(MODEL_DIR)
-        print(f"Создана папка '{MODEL_DIR}'.")
-        print(f"Пожалуйста, скачайте файлы голосовой модели (например, '{VOICE_MODEL_FILENAME_STEM}.onnx' и '{VOICE_MODEL_FILENAME_STEM}.onnx.json')")
-        print(f"из https://huggingface.co/rhasspy/piper-voices/tree/main/ru/ru_RU/irina/medium")
-        print(f"и поместите их в папку '{MODEL_DIR}'.")
-    
-    # Запускаем синтез только если PiperVoice был успешно импортирован
-    if PiperVoice:
-        text_to_speech_with_hesitations(input_text)
-    else:
-        print("Не удалось запустить синтез, так как Piper TTS не был загружен.")
+    if not os.path.exists(MODEL_DIR) and PIPER_INSTALLED : # Создаем папку, только если piper установлен, чтобы не создавать ее зря
+        try:
+            os.makedirs(MODEL_DIR)
+            print(f"Создана папка для модели: '{os.path.abspath(MODEL_DIR)}'.")
+            print(f"Не забудьте поместить в нее файлы .onnx и .onnx.json вашей голосовой модели.")
+        except OSError as e:
+            print(f"Не удалось создать папку для модели '{MODEL_DIR}': {e}. Пожалуйста, создайте ее вручную.")
+
+    text_to_speech_with_hesitations(input_text)
